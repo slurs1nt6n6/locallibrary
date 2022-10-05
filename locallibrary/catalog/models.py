@@ -1,8 +1,16 @@
 from django.db import models
+from datetime import date
+from django.contrib.auth.models import User
 from django.urls import reverse
 import uuid
+from django.shortcuts import render
+from django.http import Http404
+from datetime import date
+from django.contrib.auth.models import User
+from django.test import TestCase
 
 
+# Create your models here.
 class Genre(models.Model):
     """
     Model representing a book genre (e.g. Science Fiction, Non Fiction).
@@ -17,28 +25,21 @@ class Genre(models.Model):
 
 
 class Book(models.Model):
-    """Model representing a book (but not a specific copy of a book)."""
+    """
+    Model representing a book (but not a specific copy of a book).
+    """
     title = models.CharField(max_length=200)
-
-    # Foreign Key used because book can only have one author, but authors can have multiple books
-    # Author is a string rather than an object because it hasn't been declared yet in the file
     author = models.ForeignKey('Author', on_delete=models.SET_NULL, null=True)
-
-    summary = models.TextField(max_length=1000, help_text='Enter a brief description of the book')
-    isbn = models.CharField('ISBN', max_length=13, unique=True,
-                             help_text='13 Character <a href="https://www.isbn-international.org/content/what-isbn">ISBN number</a>')
+    language = models.CharField('language', max_length=200, null=True)
+    # Foreign Key used because book can only have one author, but authors can have multiple books
+    # Author as a string rather than object because it hasn't been declared yet in the file.
+    summary = models.TextField(max_length=1000, help_text="Enter a brief description of the book")
+    isbn = models.CharField('ISBN', max_length=13,
+                            help_text='13 Character <a href="https://www.isbn-international.org/content/what-isbn">ISBN number</a>')
+    genre = models.ManyToManyField(Genre, help_text="Select a genre for this book")
 
     # ManyToManyField used because genre can contain many books. Books can cover many genres.
     # Genre class has already been defined so we can specify the object above.
-    genre = models.ManyToManyField(Genre, help_text='Select a genre for this book')
-
-    def __str__(self):
-        """String for representing the Model object."""
-        return self.title
-
-    def get_absolute_url(self):
-        """Returns the URL to access a detail record for this book."""
-        return reverse('book-detail', args=[str(self.id)])
 
     def display_genre(self):
         """
@@ -47,6 +48,18 @@ class Book(models.Model):
         return ', '.join([genre.name for genre in self.genre.all()[:3]])
 
     display_genre.short_description = 'Genre'
+
+    def __str__(self):
+        """
+        String for representing the Model object.
+        """
+        return self.title
+
+    def get_absolute_url(self):
+        """
+        Returns the url to access a particular book instance.
+        """
+        return reverse('book-detail', args=[str(self.id)])
 
 
 class BookInstance(models.Model):
@@ -58,6 +71,7 @@ class BookInstance(models.Model):
     book = models.ForeignKey('Book', on_delete=models.SET_NULL, null=True)
     imprint = models.CharField(max_length=200)
     due_back = models.DateField(null=True, blank=True)
+    borrower = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     LOAN_STATUS = (
         ('m', 'Maintenance'),
@@ -70,12 +84,22 @@ class BookInstance(models.Model):
 
     class Meta:
         ordering = ["due_back"]
+        permissions = (("can_mark_returned", "Set book as returned"),)
 
     def __str__(self):
         """
         String for representing the Model object
         """
         return '%s (%s)' % (self.id, self.book.title)
+
+    borrower = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    @property
+    def is_overdue(self):
+        if self.due_back and date.today() > self.due_back:
+            return True
+        return False
+    # просрочен ли конкретный экземпляр книги.
 
 
 class Author(models.Model):
@@ -99,10 +123,34 @@ class Author(models.Model):
         """
         return '%s, %s' % (self.last_name, self.first_name)
 
-    def display_genre(self):
-        """
-        Creates a string for the Genre. This is required to display genre in Admin.
-        """
-        return ', '.join([genre.name for genre in self.genre.all()[:3]])
 
-    display_genre.short_description = 'Genre'
+def book_detail_view(request, primary_key):
+    try:
+        book = Book.objects.get(pk=primary_key)
+    except Book.DoesNotExist:
+        raise Http404('Book does not exist')
+
+    return render(request, 'catalog/book_detail.html', context={'book': book})
+
+    class YourTestClass(TestCase):
+
+        @classmethod
+        def setUpTestData(cls):
+            print("setUpTestData: Run once to set up non-modified data for all class methods.")
+            pass
+
+        def setUp(self):
+            print("setUp: Run once for every test method to setup clean data.")
+            pass
+
+        def test_false_is_false(self):
+            print("Method: test_false_is_false.")
+            self.assertFalse(False)
+
+        def test_false_is_true(self):
+            print("Method: test_false_is_true.")
+            self.assertTrue(False)
+
+        def test_one_plus_one_equals_two(self):
+            print("Method: test_one_plus_one_equals_two.")
+            self.assertEqual(1 + 1, 2)
